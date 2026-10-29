@@ -22,13 +22,13 @@ grep -rn "smec\|上海分公司\|DF4wnkL\|/Users/yin" --include=*.md --include=*
 node --test test/*.test.js
 ```
 
-## 2. 推 GitHub
+## 2. 推 GitHub —— 已完成
+
+仓库已创建并推送：<https://github.com/MinEagle/dsh-dingtalk-self>（public），
+已加 `dsh-plugin` topic。日常更新：
 
 ```bash
-cd dsh-dingtalk-self
-git init && git add . && git commit -m "feat: DingTalk auto-reply as yourself"
-git remote add origin git@github.com:<你的账号>/dsh-dingtalk-self.git
-git push -u origin main
+git add -A && git commit -m "…" && git push
 ```
 
 要求（已核实自 awesome-dsh-plugin 的 contributing.md）：
@@ -38,9 +38,10 @@ git push -u origin main
 3. 给仓库加 GitHub topic：`dsh-plugin`；
 4. `package.json` 里的 `repository` / `author` 改成真实地址。
 
-## 3. 可选：发 npm
+## 3. 可选：发 npm —— 未做（尚未登录）
 
 ```bash
+npm login                       # 需要你本人交互登录
 npm publish --access public     # 包名 dsh-dingtalk-self（已确认未被占用）
 ```
 
