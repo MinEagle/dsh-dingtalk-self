@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "钉钉代答",
+    "description": "别人在钉钉问你、agent 自己查资料、直接替你答复：以你本人身份收发，不转发、不换号。"
+  },
+  "ui": {
+    "nav": "钉钉代答",
+    "status": "运行状态",
+    "contacts": "监听联系人",
+    "behavior": "行为设置",
+    "pending": "待确认草稿",
+    "audit": "最近审计",
+    "save": "保存",
+    "revert": "撤销",
+    "refresh": "刷新",
+    "diagnose": "环境诊断",
+    "pause": "急停",
+    "resume": "恢复",
+    "send": "发送",
+    "discard": "丢弃",
+    "addContact": "新增联系人",
+    "remove": "删除"
+  }
+}

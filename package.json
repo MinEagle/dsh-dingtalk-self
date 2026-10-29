@@ -1,0 +1,65 @@
+{
+  "name": "dsh-dingtalk-self",
+  "version": "0.10.0",
+  "description": "以你本人钉钉身份自动回复私聊的 DSH 插件：在绑定的工作区里查资料、生成回复、以你本人身份发出",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "docs",
+    "screenshots.json"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.1-rc.1 <0.3.0-0"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "scripts": {
+    "test": "node --test test/core.test.js test/plugin.test.js test/plugin-http.test.js test/rpc.test.js test/headless.test.js test/credentials.test.js test/format.test.js test/attachments.test.js test/render.test.js test/simulate.test.js"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "deepseek-harness",
+    "dingtalk",
+    "dws",
+    "auto-reply",
+    "im",
+    "identity"
+  ],
+  "author": "MinEagle",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MinEagle/dsh-dingtalk-self.git"
+  },
+  "homepage": "https://github.com/MinEagle/dsh-dingtalk-self#readme",
+  "bugs": {
+    "url": "https://github.com/MinEagle/dsh-dingtalk-self/issues"
+  }
+}

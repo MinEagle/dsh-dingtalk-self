@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "title": "DingTalk auto-answer",
+    "description": "When someone asks you on DingTalk, the agent looks it up and answers as you — your own identity, no forwarding, no bot account."
+  },
+  "ui": {
+    "nav": "DingTalk auto-answer",
+    "status": "Status",
+    "contacts": "Watched contacts",
+    "behavior": "Behaviour",
+    "pending": "Pending drafts",
+    "audit": "Recent audit",
+    "save": "Save",
+    "revert": "Revert",
+    "refresh": "Refresh",
+    "diagnose": "Diagnose",
+    "pause": "Pause",
+    "resume": "Resume",
+    "send": "Send",
+    "discard": "Discard",
+    "addContact": "Add contact",
+    "remove": "Remove"
+  }
+}

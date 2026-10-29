@@ -1,0 +1,6 @@
+# Bundle patch layer: 把本插件插进 profile 的插件栈。
+# 宿主侧（lib/）+ 客户端侧（client/，设置页「钉钉本人身份」）都有；
+# 客户端由 package.json 的 dsh.client 声明，无需构建。
+- insert:
+    - id: dsh-dingtalk-self
+      name: dsh-dingtalk-self

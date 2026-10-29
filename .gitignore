@@ -1,0 +1,5 @@
+node_modules/
+*.log
+.DS_Store
+# 运行时产物（插件把渲染出来的图片写在这里）
+outbox/
