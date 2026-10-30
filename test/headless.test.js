@@ -190,3 +190,36 @@ test('开启配图时提示词里带渲染块语法', async () => {
   assert.match(on, /最多 6 行/);
   assert.doesNotMatch(off, /\[\[render:/);
 });
+
+test('会话标题带对方名字，并压在首行', async () => {
+  const { buildSessionTitle, buildPrompt } = await import('../lib/agents/headless.js');
+  const contact = { name: '赵迎凯' };
+  const messages = [{ text: '保养合同从 APP 提交签名到最终签收，经过哪些状态？' }];
+  const title = buildSessionTitle(contact, messages);
+  assert.equal(title, '【钉钉代答·赵迎凯】保养合同从 APP 提交签名到最终签收，经过哪些状态？');
+  // 标题必须就是提示词的第一行（fallback 会按字节截断到这里）
+  const prompt = buildPrompt({ contact, messages, persona: '' });
+  assert.equal(prompt.split('\n')[0], title);
+});
+
+test('会话标题：多条消息加角标，超长截断', async () => {
+  const { buildSessionTitle } = await import('../lib/agents/headless.js');
+  assert.equal(
+    buildSessionTitle({ name: '曹坤' }, [{ text: '在吗' }, { text: '接口干嘛的' }]),
+    '【钉钉代答·曹坤】在吗（+1 条）'
+  );
+  const long = buildSessionTitle({ name: '张三' }, [{ text: '一'.repeat(80) }]);
+  assert.ok(long.length <= 40, `标题不该太长：${long.length}`);
+  assert.match(long, /…$/);
+});
+
+test('overlay 关掉标题模型并按首行字节数精确截断', async () => {
+  const { buildModelOverlay } = await import('../lib/agents/headless.js');
+  const yml = buildModelOverlay({ provider: 'magpie', model: 'm', titleBytes: 100 });
+  assert.match(yml, /- id: session-title-llm\n  disabled: true/);
+  assert.match(yml, /fallbackMaxBytes: 100/);
+  assert.match(yml, /provider: "magpie"/);
+  // 没给 titleBytes 时不应出现标题补丁
+  const plain = buildModelOverlay({ provider: 'magpie', model: 'm' });
+  assert.doesNotMatch(plain, /session-title-llm/);
+});
