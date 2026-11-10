@@ -223,3 +223,27 @@ test('overlay 关掉标题模型并按首行字节数精确截断', async () => 
   const plain = buildModelOverlay({ provider: 'magpie', model: 'm' });
   assert.doesNotMatch(plain, /session-title-llm/);
 });
+
+test('会话被别的进程占用时自动新建会话，而不是每轮失败', async () => {
+  // 带 --session-id 时模拟「已被占用」；不带时正常返回
+  const cli = fakeCli(
+    '#!/bin/sh\ncat >/dev/null\n' +
+    'for a in "$@"; do [ "$a" = "--session-id" ] && { echo "dsh: session \"session-x\" is already owned by an active write handle" >&2; exit 1; }; done\n' +
+    'echo \'{"type":"session","sessionId":"session-new","cwd":"/tmp"}\'\n' +
+    'echo \'{"type":"final","text":"好的"}\'\n'
+  );
+  const res = await createHeadlessAgent({ dshPath: cli, timeoutSeconds: 20 })
+    .generate({ contact, messages, sessionId: 'session-x' });
+  assert.equal(res.ok, true);
+  assert.equal(res.reply, '好的');
+  assert.equal(res.sessionId, 'session-new');
+  assert.match(res.note, /已新建会话/);
+});
+
+test('其他错误（比如模型没凭据）不会被当成「会话不可接管」而重试', async () => {
+  const cli = fakeCli('#!/bin/sh\ncat >/dev/null\necho "dsh: no API key for provider" >&2\nexit 1\n');
+  const res = await createHeadlessAgent({ dshPath: cli, timeoutSeconds: 20 })
+    .generate({ contact, messages, sessionId: 'session-x' });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /no API key/);
+});
