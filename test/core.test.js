@@ -749,3 +749,42 @@ test('限流记录的是真实发送时刻，而不是轮次开始时间', async
   assert.ok(Math.abs(recorded[0] - Date.now()) < 5000, `应记录真实时刻，实际 ${recorded[0]}`);
   assert.ok(Math.abs(recorded[0] - BASE) > 60_000, '不该是轮次的 now');
 });
+
+test('上一轮失败留下的 pending 也要按有效期过滤，恢复后不补答旧消息', async () => {
+  const h = harness({
+    reply: '不该发',
+    messages: [],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 300 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  // 模拟「上一轮生成失败」留下的旧 pending（40 分钟前）
+  const st = h.store.load();
+  st.pending['张三-OD1'] = [{ messageId: 'old-pending', text: '很久以前的问题', createTime: BASE - 40 * 60 * 1000, senderId: 'OD1' }];
+  h.store.save(st);
+
+  const summary = await h.run(BASE);
+  assert.equal(h.calls.send.length, 0, '旧 pending 不该被补答');
+  assert.equal(summary.stale, 1);
+  assert.deepEqual(h.store.peek().pending['张三-OD1'], [], 'pending 应被清掉');
+});
+
+test('pending 里的新消息仍然正常回复', async () => {
+  const h = harness({
+    reply: '好',
+    messages: [],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 600 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  const st = h.store.load();
+  st.pending['张三-OD1'] = [{ messageId: 'p1', text: '刚问的', createTime: BASE - 60 * 1000, senderId: 'OD1' }];
+  h.store.save(st);
+
+  await h.run(BASE);
+  assert.equal(h.calls.send.length, 1);
+});
