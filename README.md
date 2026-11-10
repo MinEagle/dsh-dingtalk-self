@@ -136,8 +136,9 @@ POST /dsh-dingtalk-self/api/test-reply         { message }   // 模拟回答，�
 | `mergeWindowSeconds` | `20` | 连发合并窗口 |
 | `quietHours` | 关 | 静默时段，命中转草稿 |
 | `limits.maxRepliesPerHour` | `10` | 每人每小时上限 |
-| `limits.minSecondsBetweenReplies` | `30` | 两条之间最小间隔 |
+| `limits.minSecondsBetweenReplies` | `30` | 两条之间最小间隔（按**真实发送时刻**计算，不是轮次开始时间） |
 | `limits.maxReplyChars` | `1200` | 回复长度上限；超过会被截断并在末尾加「…」 |
+| `limits.maxMessageAgeSeconds` | `600` | **只回复这个时长内的消息**；更早的标记已读、不回复。防止关停几天后再打开时补答历史积压；`0` = 不限（不建议） |
 | `replyFormat` | `markdown` | 回复格式：`markdown`（钉钉渲染加粗/列表/小标题）/ `text`（纯文本 `•` 列表） |
 | `replyMarker` | `（本条由助手代答）` | **出站标识**：附在每条发出去的消息末尾，让对方知道不是本人手打；留空则不加 |
 | `guard.*` | 全开 | 出站护栏开关与禁用词 |

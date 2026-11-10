@@ -205,6 +205,10 @@ window.__ModuleLoader__.load({
       quietEnd: '结束',
       maxRepliesLabel: '每小时上限',
       maxCharsLabel: '回复字数上限',
+      maxAgeLabel: '消息有效期（分钟）',
+      maxAgeHint: '只回复这个时长内的消息。更早的消息会标记已读但不回复——关停几天后再打开时，不会去补答历史积压。',
+      maxAgeZeroHint: '0 = 不限，会把关停期间的积压也补答，不建议',
+      invalidMaxAge: '消息有效期需为 0–1440 的整数（分钟）',
       timeZoneNote: '时区：{tz}',
       invalidPollInterval: '轮询间隔需为 10–3600 的整数',
       invalidMaxRepliesPerHour: '每小时上限需为 1–120 的整数',
@@ -438,6 +442,10 @@ window.__ModuleLoader__.load({
       quietEnd: 'End',
       maxRepliesLabel: 'Replies per hour',
       maxCharsLabel: 'Max reply characters',
+      maxAgeLabel: 'Message age limit (minutes)',
+      maxAgeHint: 'Only reply to messages from this window. Older messages are marked read without a reply, so reopening after a few days will not answer the backlog.',
+      maxAgeZeroHint: '0 = no limit; the backlog from downtime would be answered too, not recommended',
+      invalidMaxAge: 'Message age limit must be an integer between 0 and 1440 minutes',
       timeZoneNote: 'Time zone: {tz}',
       invalidPollInterval: 'Poll interval must be an integer between 10 and 3600',
       invalidMaxRepliesPerHour: 'Replies per hour must be an integer between 1 and 120',
@@ -925,10 +933,24 @@ window.__ModuleLoader__.load({
       const draftLimits = draft.limits && typeof draft.limits === 'object' ? draft.limits : {};
       const configLimits = config.limits && typeof config.limits === 'object' ? config.limits : {};
       const nextLimits = Object.assign({}, configLimits, draftLimits);
+      delete nextLimits.maxAgeMinutes;
       if (!isIntInRange(draftLimits.maxRepliesPerHour, 1, 120)) errors.push(translate('invalidMaxRepliesPerHour'));
       else nextLimits.maxRepliesPerHour = toInt(draftLimits.maxRepliesPerHour, configLimits.maxRepliesPerHour);
       if (!isIntInRange(draftLimits.maxReplyChars, 20, 4000)) errors.push(translate('invalidMaxReplyChars'));
       else nextLimits.maxReplyChars = toInt(draftLimits.maxReplyChars, configLimits.maxReplyChars);
+      const touchedAge = draftLimits.maxAgeMinutes !== undefined;
+      const configAgeSeconds =
+        Number.isFinite(Number(configLimits.maxMessageAgeSeconds)) && Number(configLimits.maxMessageAgeSeconds) >= 0
+          ? Number(configLimits.maxMessageAgeSeconds)
+          : 600;
+      const maxAgeMinutesRaw = touchedAge ? draftLimits.maxAgeMinutes : Math.round(configAgeSeconds / 60);
+      if (!isIntInRange(maxAgeMinutesRaw, 0, 1440)) {
+        errors.push(translate('invalidMaxAge'));
+      } else if (touchedAge) {
+        nextLimits.maxMessageAgeSeconds = toInt(maxAgeMinutesRaw, 10) * 60;
+      } else {
+        nextLimits.maxMessageAgeSeconds = configAgeSeconds;
+      }
       if (JSON.stringify(nextLimits) !== JSON.stringify(configLimits)) patch.limits = nextLimits;
 
       const replyMarker = textOf(draft.replyMarker).trim();
@@ -2596,6 +2618,12 @@ window.__ModuleLoader__.load({
               : '10';
         const quiet = normalizeQuietHours(config.quietHours, undefined);
         const limits = config.limits && typeof config.limits === 'object' ? config.limits : {};
+        const maxAgeMinutes =
+          limits.maxAgeMinutes !== undefined
+            ? textOf(limits.maxAgeMinutes)
+            : Number.isFinite(Number(limits.maxMessageAgeSeconds)) && Number(limits.maxMessageAgeSeconds) >= 0
+              ? String(Math.round(Number(limits.maxMessageAgeSeconds) / 60))
+              : '10';
         const timeZone = textOf(config.timeZone);
         return h(
           'section',
@@ -2887,6 +2915,25 @@ window.__ModuleLoader__.load({
                   setLimit('maxReplyChars', event.target.value);
                 },
               })
+            ),
+            h(
+              'label',
+              { className: 'dws-field' },
+              h('span', { className: 'dws-label' }, t('maxAgeLabel')),
+              h('input', {
+                className: 'dws-input',
+                type: 'number',
+                min: 0,
+                max: 1440,
+                step: 1,
+                value: maxAgeMinutes,
+                'aria-label': t('maxAgeLabel'),
+                onChange: function (event) {
+                  setLimit('maxAgeMinutes', event.target.value);
+                },
+              }),
+              h('span', { className: 'dws-hint' }, t('maxAgeHint')),
+              h('span', { className: Number(maxAgeMinutes) === 0 ? 'dws-warn-text' : 'dws-hint' }, t('maxAgeZeroHint'))
             )
           ),
           h(

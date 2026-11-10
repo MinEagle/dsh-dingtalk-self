@@ -25,7 +25,10 @@ function baseConfig(overrides = {}) {
     mergeWindowSeconds: 0,
     quietHours: { enabled: false, start: '22:00', end: '08:00' },
     contacts: [{ name: '张三', openDingTalkId: 'OD1', userId: '', workspaceId: 'ws1', autoReply: false, sessionId: '' }],
-    limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50 },
+    limits: {
+      maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300,
+      maxFetchPerPoll: 50, maxMessageAgeSeconds: 0
+    },
     guard: { enabled: true, stripCodeBlocks: true, redactPaths: true, redactInternalUrls: true, blockedWords: [] },
     agent: { kind: 'headless', profile: 'headless', timeoutSeconds: 120, persona: '简洁' },
     ...overrides
@@ -445,7 +448,7 @@ test('标识会占用字数预算，正文按 (上限 - 标识长度) 截断', a
     messages: [{ messageId: 'm1', text: '在吗', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }],
     config: {
       mode: 'auto', mergeWindowSeconds: 0, replyMarker: '[AI]',
-      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 100, maxFetchPerPoll: 50 },
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 100, maxFetchPerPoll: 50, maxMessageAgeSeconds: 0 },
       contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
     }
   });
@@ -665,4 +668,84 @@ test('行数太少不出图（避免一句话也配图）', async () => {
   assert.equal(h.calls.send.length, 1, '文字照发');
   const audit = h.store.peek().audit.find((a) => a.action === 'render');
   assert.match(audit.detail, /少于 3 行/);
+});
+
+// ---------- 只回最近的消息（防止关停后补答历史） ----------
+
+test('超过有效期的消息不回复，只标记已读并记审计', async () => {
+  const h = harness({
+    reply: '这条不该发出去',
+    messages: [
+      { messageId: 'old1', text: '两天前的问题', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }
+    ],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 600 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  const summary = await h.run(BASE);
+  assert.equal(h.calls.send.length, 0, '过期消息不该回复');
+  assert.equal(summary.stale, 1);
+  const audit = h.store.peek().audit.find((a) => a.action === 'skipped' && a.stage === 'stale');
+  assert.ok(audit, '应有跳过审计');
+  assert.match(audit.detail, /超过 10 分钟/);
+});
+
+test('有效窗口内的消息照常回复', async () => {
+  const h = harness({
+    reply: '好',
+    // BASE = 2026-10-28 15:00（Asia/Shanghai），这条是 5 分钟前
+    messages: [{ messageId: 'fresh1', text: '刚问的', senderId: 'OD1', createTime: '2026-10-28 14:55:00' }],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 600 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  const summary = await h.run(BASE);
+  assert.equal(h.calls.send.length, 1, '10 分钟内的消息应正常回复');
+  assert.equal(summary.stale, 0);
+});
+
+test('拉取起点被压到有效窗口内，不会拉整段历史', async () => {
+  const seen = [];
+  const holder = { state: emptyState() };
+  const store = {
+    isPaused: () => false,
+    load: () => holder.state,
+    save: (x) => { holder.state = x; },
+    audit: (x, e) => x.audit.push({ ts: new Date().toISOString(), ...e })
+  };
+  // 游标停在 12 天前（等于关停很久）
+  holder.state.cursors['张三-OD1'] = BASE - 12 * 24 * 3600 * 1000;
+  const adapters = {
+    async listMessages(_c, sinceMs) { seen.push(sinceMs); return { ok: true, messages: [] }; },
+    async generate() { return { ok: true, reply: 'x' }; },
+    async send() { return { ok: true }; }
+  };
+  const cfg = baseConfig({
+    contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1' }],
+    limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 600 }
+  });
+  const summary = await runCycle({ config: cfg, state: store.load(), store, adapters, now: BASE });
+  assert.equal(seen[0], BASE - 600 * 1000, '拉取起点应被压到 10 分钟窗口');
+  assert.equal(summary.backlogTrimmed, 1);
+});
+
+test('限流记录的是真实发送时刻，而不是轮次开始时间', async () => {
+  const h = harness({
+    reply: '好',
+    messages: [{ messageId: 'm1', text: '在吗', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 0 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  await h.run(BASE);
+  const recorded = h.store.peek().sent['张三-OD1'];
+  assert.ok(Array.isArray(recorded) && recorded.length === 1);
+  assert.ok(Math.abs(recorded[0] - Date.now()) < 5000, `应记录真实时刻，实际 ${recorded[0]}`);
+  assert.ok(Math.abs(recorded[0] - BASE) > 60_000, '不该是轮次的 now');
 });
