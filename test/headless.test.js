@@ -247,3 +247,17 @@ test('其他错误（比如模型没凭据）不会被当成「会话不可接�
   assert.equal(res.ok, false);
   assert.match(res.error, /no API key/);
 });
+
+test('会话属于别的工作区时也退回新建会话', async () => {
+  const cli = fakeCli(
+    '#!/bin/sh\ncat >/dev/null\n' +
+    'for a in "$@"; do [ "$a" = "--session-id" ] && { echo "dsh: session \"session-x\" was recorded in \"/a\", not \"/b\"" >&2; exit 1; }; done\n' +
+    'echo \'{"type":"session","sessionId":"session-y","cwd":"/b"}\'\n' +
+    'echo \'{"type":"final","text":"好"}\'\n'
+  );
+  const res = await createHeadlessAgent({ dshPath: cli, timeoutSeconds: 20 })
+    .generate({ contact, messages, sessionId: 'session-x' });
+  assert.equal(res.ok, true);
+  assert.equal(res.sessionId, 'session-y');
+  assert.match(res.note, /已新建会话/);
+});

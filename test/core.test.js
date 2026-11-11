@@ -788,3 +788,68 @@ test('pending 里的新消息仍然正常回复', async () => {
   await h.run(BASE);
   assert.equal(h.calls.send.length, 1);
 });
+
+test('换了工作区后不再复用旧会话（dsh 拒绝跨工作区接管）', async () => {
+  const genArgs = [];
+  const h = harness({
+    reply: '好',
+    messages: [{ messageId: 'm1', text: '在吗', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 0 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws-new', autoReply: true }]
+    }
+  });
+  // 旧状态：会话是在 ws-old 里建的
+  const st = h.store.load();
+  st.sessions['张三-OD1'] = 'session-old';
+  st.sessionWorkspaces = { '张三-OD1': 'ws-old' };
+  h.store.save(st);
+  const origGenerate = h.adapters.generate;
+  h.adapters.generate = async (arg) => { genArgs.push(arg.sessionId); return origGenerate(arg); };
+
+  await h.run(BASE);
+  assert.equal(genArgs[0], '', '换工作区后应放弃旧会话');
+  const after = h.store.peek();
+  assert.equal(after.sessions['张三-OD1'], undefined, '旧会话应被丢弃');
+  assert.ok(after.audit.some((a) => a.action === 'session' && a.stage === 'reset'), '应记一条工作区变更审计');
+});
+
+test('工作区没变时继续复用会话', async () => {
+  const genArgs = [];
+  const h = harness({
+    reply: '好',
+    messages: [{ messageId: 'm1', text: '在吗', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 0 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  const st = h.store.load();
+  st.sessions['张三-OD1'] = 'session-old';
+  st.sessionWorkspaces = { '张三-OD1': 'ws1' };
+  h.store.save(st);
+  const origGenerate = h.adapters.generate;
+  h.adapters.generate = async (arg) => { genArgs.push(arg.sessionId); return origGenerate(arg); };
+
+  await h.run(BASE);
+  assert.equal(genArgs[0], 'session-old', '工作区没变应复用');
+});
+
+test('生成成功后记下会话所属工作区', async () => {
+  const h = harness({
+    reply: '好',
+    messages: [{ messageId: 'm1', text: '在吗', senderId: 'OD1', createTime: '2026-03-01 10:00:00' }],
+    config: {
+      mode: 'auto', mergeWindowSeconds: 0, replyMarker: '',
+      limits: { maxRepliesPerHour: 10, minSecondsBetweenReplies: 0, maxReplyChars: 300, maxFetchPerPoll: 50, maxMessageAgeSeconds: 0 },
+      contacts: [{ name: '张三', openDingTalkId: 'OD1', workspaceId: 'ws1', autoReply: true }]
+    }
+  });
+  h.adapters.generate = async () => ({ ok: true, reply: '好', sessionId: 'session-new' });
+  await h.run(BASE);
+  const st = h.store.peek();
+  assert.equal(st.sessions['张三-OD1'], 'session-new');
+  assert.equal(st.sessionWorkspaces['张三-OD1'], 'ws1');
+});
