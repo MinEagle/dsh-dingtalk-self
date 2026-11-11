@@ -261,3 +261,13 @@ test('会话属于别的工作区时也退回新建会话', async () => {
   assert.equal(res.sessionId, 'session-y');
   assert.match(res.note, /已新建会话/);
 });
+
+test('提示词里明确禁止编造统计数字，并说明自己查不到库', async () => {
+  const { buildPrompt } = await import('../lib/agents/headless.js');
+  const p = buildPrompt({ contact, messages, persona: '' });
+  assert.match(p, /你\*\*没有\*\*数据库、接口和命令行权限/);
+  assert.match(p, /严禁估算、按比例倒推、凑百分比/);
+  assert.match(p, /直接说明查不到/);
+  assert.match(p, /不要把 SQL 注释里的历史说明当成当前统计结果/);
+  assert.match(p, /编错的数字比说「查不到」严重得多/);
+});
