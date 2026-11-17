@@ -214,6 +214,21 @@ window.__ModuleLoader__.load({
       invalidMaxRepliesPerHour: '每小时上限需为 1–120 的整数',
       invalidMaxReplyChars: '回复字数上限需为 20–4000 的整数',
 
+      entriesTitle: '入口',
+      entriesDesc: '控制钉钉代答出现在哪里。至少保留一个入口，否则配置页会打不开。',
+      entrySettings: '设置页入口',
+      entrySettingsHint: '在「设置」里显示这一页（弹窗，比较窄）。',
+      entryPluginsPage: '插件页入口',
+      entryPluginsPageHint: '在插件页这一行显示「配置」，点开是完整页面。',
+      entrySidebar: '左上角图标',
+      entrySidebarHint: '在左上角图标列加一个图标，点一下在主栏打开整页，比弹窗宽得多。',
+      entryConversationView: '会话视图标签',
+      entryConversationViewHint: '在会话头部标签行加一个入口，内容和当前会话相关。',
+      invalidEntriesEmpty: '至少要保留一个入口，否则配置页会打不开',
+      entrySummaryOn: '已开启',
+      entrySummaryOff: '未开启',
+      entrySummaryContacts: '{n} 位联系人',
+
       draftsTitle: '待确认草稿',
       draftsHint: '来自 confirm 模式或降级的回复，等待你决定。',
       draftsEmpty: '没有待确认的草稿。',
@@ -449,7 +464,22 @@ window.__ModuleLoader__.load({
       timeZoneNote: 'Time zone: {tz}',
       invalidPollInterval: 'Poll interval must be an integer between 10 and 3600',
       invalidMaxRepliesPerHour: 'Replies per hour must be an integer between 1 and 120',
-      invalidMaxReplyChars: 'Max reply characters must be an integer between 20 and 4000',
+      invalidMaxReplyChars: 'Reply length cap must be an integer between 20 and 4000',
+
+      entriesTitle: 'Entry points',
+      entriesDesc: 'Where DingTalk auto-answer appears. Keep at least one entry open, or the settings page cannot be reached.',
+      entrySettings: 'Settings page',
+      entrySettingsHint: 'Show this page in Settings (a narrow dialog).',
+      entryPluginsPage: 'Plugins page',
+      entryPluginsPageHint: 'Show a Configure control on this row in the Plugins page; it opens the full page.',
+      entrySidebar: 'Sidebar icon',
+      entrySidebarHint: 'Add an icon to the sidebar panel list; clicking it opens the full-width page.',
+      entryConversationView: 'Session view tab',
+      entryConversationViewHint: 'Add a tab to the session header, showing content related to the current session.',
+      invalidEntriesEmpty: 'Keep at least one entry open, or the settings page cannot be reached',
+      entrySummaryOn: 'Enabled',
+      entrySummaryOff: 'Disabled',
+      entrySummaryContacts: '{n} contacts',
 
       draftsTitle: 'Awaiting confirmation',
       draftsHint: 'Replies from confirm mode or downgraded sends, waiting for your decision.',
@@ -1014,6 +1044,14 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const nextEntries = normalizeEntries(draft.entries);
+      const configEntries = normalizeEntries(config.entries);
+      if (!ENTRY_KEYS.some((key) => nextEntries[key] === true)) {
+        errors.push(translate('invalidEntriesEmpty'));
+      } else if (JSON.stringify(nextEntries) !== JSON.stringify(configEntries)) {
+        patch.entries = nextEntries;
+      }
+
       const draftAgent = draft.agent && typeof draft.agent === 'object' ? draft.agent : {};
       const configAgent = config.agent && typeof config.agent === 'object' ? config.agent : {};
       const nextAgent = Object.assign({}, configAgent, draftAgent, {
@@ -1038,6 +1076,11 @@ window.__ModuleLoader__.load({
     const CSS = `
 .dws-root { display: flex; flex-direction: column; gap: 14px; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; padding: 2px 0 10px; }
 .dws-root, .dws-root * { box-sizing: border-box; }
+.dws-root-wide { padding: 18px 24px 32px; max-width: 1080px; margin: 0 auto; width: 100%; gap: 16px; }
+.dws-root-wide .dws-page-title { font-size: 20px; }
+.dws-entry-list { display: flex; flex-direction: column; gap: 12px; }
+.dws-entry-row { display: flex; flex-direction: column; gap: 2px; }
+.dws-entry-hint { margin: 0; padding-left: 22px; }
 .dws-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .dws-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dws-head-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -1204,9 +1247,107 @@ window.__ModuleLoader__.load({
       return h('p', { className: 'dws-empty' }, text);
     }
 
+    /* ============================ 入口（四个位置） ============================ */
+
+    /**
+     * 插件在界面上出现的四个位置：
+     *   settings          「设置」里的一页（弹窗，窄）
+     *   pluginsPage       插件页该行的「配置」入口
+     *   sidebar           左上角图标列 + 主栏整页（宽）
+     *   conversationView  会话头部标签行
+     *
+     * 开关状态在宿主 configure 里（config.entries），客户端只在 apply 时读一次，
+     * 保存后再同步一次；注册是按开关动态增删的，所以关掉之后界面上不会留空壳。
+     */
+    const ENTRY_KEYS = ['settings', 'pluginsPage', 'sidebar', 'conversationView'];
+    const ENTRY_DEFAULTS = { settings: true, pluginsPage: true, sidebar: false, conversationView: false };
+
+    function normalizeEntries(value) {
+      const source = value && typeof value === 'object' ? value : {};
+      const next = {};
+      for (const key of ENTRY_KEYS) next[key] = typeof source[key] === 'boolean' ? source[key] : ENTRY_DEFAULTS[key];
+      if (!ENTRY_KEYS.some((key) => next[key] === true)) next.settings = true;
+      return next;
+    }
+
+    /** 最近一次读到的入口开关；注册与注销都看它。 */
+    let entryState = normalizeEntries(null);
+    /** 已注册入口的句柄，开关变化时逐个 update()。 */
+    const entryHandles = [];
+    let entrySync = null;
+
+    /** 宿主返回的 config.entries 变了就重算，返回是否变化。 */
+    function setEntryState(entries) {
+      const next = normalizeEntries(entries);
+      const changed = JSON.stringify(next) !== JSON.stringify(entryState);
+      entryState = next;
+      return changed;
+    }
+
+    /** 左上角图标列里的图标；size/active 由宿主传入，点击由宿主处理。 */
+    function SidebarEntryIcon(props) {
+      const size = props && typeof props.size === 'number' && props.size > 0 ? props.size : 16;
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 24 24',
+          fill: 'none',
+          'aria-hidden': 'true',
+          style: { display: 'block' }
+        },
+        h('path', {
+          d: 'M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.4A1 1 0 0 1 4 17.6V15a2.5 2.5 0 0 1 0-2.5z',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinejoin: 'round',
+          strokeLinecap: 'round'
+        })
+      );
+    }
+
+    /** 插件页的配置入口：summary 只给一行摘要，page 渲染完整页面。 */
+    function PluginRowConfig(props) {
+      const view = props && props.view === 'page' ? 'page' : 'summary';
+      const lang = useLang(props);
+      const t = React.useCallback(function (key, params) {
+        return translate(key, params);
+      }, [lang]);
+      const [info, setInfo] = React.useState(null);
+      React.useEffect(function () {
+        let alive = true;
+        fetchState()
+          .then(function (payload) {
+            if (alive) setInfo(payload);
+          })
+          .catch(function () {
+            /* 摘要拿不到就显示空 */
+          });
+        return function () {
+          alive = false;
+        };
+      }, []);
+      if (view === 'page') return h(SettingsPage, Object.assign({}, props, { surface: 'pluginPage' }));
+
+      const config = info && info.config ? info.config : {};
+      const contacts = Array.isArray(config.contacts) ? config.contacts : [];
+      const entries = normalizeEntries(config.entries);
+      const parts = [
+        config.enabled === true ? t('entrySummaryOn') : t('entrySummaryOff'),
+        t('entrySummaryContacts', { n: contacts.length }),
+        (config.mode === 'auto' ? t('modeAuto') : config.mode === 'confirm' ? t('modeConfirm') : t('modeDraft')) || '',
+      ].filter(Boolean);
+      return h('p', { className: 'dws-hint' }, parts.join(' · '));
+    }
+
     /* ============================== 设置页 ============================== */
 
     function SettingsPage(props) {
+      // surface：'settings' 弹窗 | 'main' 主栏整页 | 'view' 会话视图 | 'pluginPage' 插件页
+      const surface = typeof props.surface === 'string' ? props.surface : 'settings';
+      const wide = surface === 'main' || surface === 'view';
+      const rootClass = wide ? 'dws-root dws-root-wide' : 'dws-root';
       const lang = useLang(props);
       const t = React.useCallback(function (key, params) {
         return translate(key, params);
@@ -1444,6 +1585,14 @@ window.__ModuleLoader__.load({
         });
       }
 
+      function setEntryField(key, value) {
+        updateDraft(function (previous) {
+          const entries = Object.assign({}, normalizeEntries(previous.entries));
+          entries[key] = value === true;
+          return Object.assign({}, previous, { entries: entries });
+        });
+      }
+
       function setAgentField(key, value) {
         updateDraft(function (previous) {
           const agent = Object.assign({}, previous.agent && typeof previous.agent === 'object' ? previous.agent : {});
@@ -1668,6 +1817,10 @@ window.__ModuleLoader__.load({
         setActionError(null);
         try {
           const payload = await postJson('config', { patch: result.patch });
+          if (payload && payload.config) {
+            setEntryState(payload.config.entries);
+            notifyEntryListeners();
+          }
           const next = await load('force');
           if (next) {
             const source = (next && next.configSource) || (payload && payload.configSource);
@@ -2599,6 +2752,54 @@ window.__ModuleLoader__.load({
         );
       }
 
+      /** 入口小节：四个位置各自可开关，至少保留一个。 */
+      function renderEntries() {
+        const config = draft || data.config || {};
+        const entries = normalizeEntries(config.entries);
+        const items = [
+          ['settings', 'entrySettings', 'entrySettingsHint'],
+          ['pluginsPage', 'entryPluginsPage', 'entryPluginsPageHint'],
+          ['sidebar', 'entrySidebar', 'entrySidebarHint'],
+          ['conversationView', 'entryConversationView', 'entryConversationViewHint'],
+        ];
+        return h(
+          'section',
+          { className: 'dws-card' },
+          h(
+            'div',
+            { className: 'dws-card-head' },
+            h('div', { className: 'dws-head-text' }, h('h3', { className: 'dws-title' }, t('entriesTitle')))
+          ),
+          h('p', { className: 'dws-hint' }, t('entriesDesc')),
+          h(
+            'div',
+            { className: 'dws-entry-list' },
+            items.map(function (item) {
+              const key = item[0];
+              const on = entries[key] === true;
+              return h(
+                'div',
+                { key: key, className: 'dws-entry-row' },
+                h(
+                  'label',
+                  { className: 'dws-switch' },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: on,
+                    'aria-label': t(item[1]),
+                    onChange: function (event) {
+                      setEntryField(key, event.target.checked);
+                    },
+                  }),
+                  h('span', null, t(item[1]))
+                ),
+                h('p', { className: 'dws-hint dws-entry-hint' }, t(item[2]))
+              );
+            })
+          )
+        );
+      }
+
       function renderBehavior() {
         const config = draft || data.config || {};
         const mode = EDIT_MODES[config.mode] ? config.mode : 'draft';
@@ -3345,13 +3546,13 @@ window.__ModuleLoader__.load({
       );
 
       if (status === 'loading' && !data) {
-        return h('div', { className: 'dws-root' }, styleNode, pageHead, h('section', { className: 'dws-card' }, h('p', { className: 'dws-muted' }, t('loading'))));
+        return h('div', { className: rootClass }, styleNode, pageHead, h('section', { className: 'dws-card' }, h('p', { className: 'dws-muted' }, t('loading'))));
       }
 
       if (!data) {
         return h(
           'div',
-          { className: 'dws-root' },
+          { className: rootClass },
           styleNode,
           pageHead,
           h(
@@ -3380,7 +3581,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: 'dws-root' },
+        { className: rootClass },
         styleNode,
         pageHead,
         actionError ? h('p', { className: 'dws-banner dws-banner-error', role: 'alert' }, actionError) : null,
@@ -3388,6 +3589,7 @@ window.__ModuleLoader__.load({
         renderContacts(),
         renderTestReply(),
         renderBehavior(),
+        renderEntries(),
         renderPendingDrafts(),
         renderRecentDrafts(),
         renderAudit(),
@@ -3503,24 +3705,190 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** 组件在开关关闭时渲染 null，宿主不会留下空壳。 */
+    function gated(Component, key, surface) {
+      return function EntryGate(props) {
+        // 开关变化后要立刻重新渲染：订阅一次通知，用计数器强制更新
+        const [, force] = React.useState(0);
+        React.useEffect(function () {
+          const listener = function () {
+            force(function (n) {
+              return n + 1;
+            });
+          };
+          entryListeners.add(listener);
+          return function () {
+            entryListeners.delete(listener);
+          };
+        }, []);
+        if (entryState[key] !== true) return null;
+        return h(Component, Object.assign({}, props, surface ? { surface: surface } : null));
+      };
+    }
+
+    /**
+     * 注册一个入口。返回 { dispose, update }：
+     *   dispose() 彻底注销；update(enabled) 在开关变化时真正增删注册。
+     *
+     * 为什么不能只让组件 return null：sidebar.panellist 的列表项由注册本身产生，
+     * 组件返回 null 只会得到一个空白按钮，图标还在。所以那一处必须真注销。
+     */
+    function registerEntry(ctx, options, Component, key, surface) {
+      let off = null;
+      let mounted = false;
+      const mount = function () {
+        if (mounted) return;
+        try {
+          const result = ctx.slots.register(options, gated(Component, key, surface));
+          off = typeof result === 'function' ? result : null;
+          mounted = true;
+        } catch (error) {
+          try {
+            if (typeof console !== 'undefined' && console.error) console.error('[dsh-dingtalk-self] 注册入口失败 ' + options.name, error);
+          } catch (ignored) {
+            /* 忽略 */
+          }
+        }
+      };
+      const unmount = function () {
+        if (!mounted) return;
+        try {
+          if (typeof off === 'function') off();
+        } catch (error) {
+          /* 忽略 */
+        }
+        off = null;
+        mounted = false;
+      };
+      const update = function () {
+        if (entryState[key] === true) mount();
+        else unmount();
+      };
+      update();
+      return {
+        dispose: unmount,
+        update: update,
+      };
+    }
+
     function apply(ctx) {
       installLocale(ctx);
-      try {
+
+      const entries = [];
+
+      // ① 设置页（弹窗）
+      entries.push(
         ctx.slots.inject('settings.section', function () {
-          return ctx.slots.register(
-            {
-              name: 'settings.section',
-              id: 'dingtalk-self',
-              order: 45,
-              label: () => '钉钉代答',
-            },
-            SettingsPage
+          const handle = registerEntry(
+            ctx,
+            { name: 'settings.section', id: 'dingtalk-self', order: 45, label: () => '钉钉代答' },
+            SettingsPage,
+            'settings',
+            'settings'
           );
-        });
+          entryHandles.push(handle);
+          return handle.dispose;
+        })
+      );
+
+      // ② 插件页该行的「配置」入口
+      entries.push(
+        ctx.slots.inject('plugins.row.config', function () {
+          const handle = registerEntry(ctx, { name: 'plugins.row.config', key: 'dsh-dingtalk-self#dsh-dingtalk-self' }, PluginRowConfig, 'pluginsPage');
+          entryHandles.push(handle);
+          return handle.dispose;
+        })
+      );
+
+      // ③ 左上角图标 + 主栏整页（成对增删）
+      entries.push(
+        ctx.slots.inject('sidebar.panellist', function () {
+          const icon = registerEntry(
+            ctx,
+            { name: 'sidebar.panellist', id: 'dingtalk-self', order: 2, label: () => '钉钉代答' },
+            SidebarEntryIcon,
+            'sidebar'
+          );
+          const page = registerEntry(ctx, { name: 'main', key: 'dingtalk-self' }, SettingsPage, 'sidebar', 'main');
+          const pair = {
+            dispose: function () {
+              page.dispose();
+              icon.dispose();
+            },
+            update: function () {
+              icon.update();
+              page.update();
+            },
+          };
+          entryHandles.push(pair);
+          return pair.dispose;
+        })
+      );
+
+      // ④ 会话头部标签行
+      entries.push(
+        ctx.slots.inject('conversation.view', function () {
+          const handle = registerEntry(
+            ctx,
+            { name: 'conversation.view', id: 'dingtalk-self', order: 40, label: () => '钉钉代答' },
+            SettingsPage,
+            'conversationView',
+            'view'
+          );
+          entryHandles.push(handle);
+          return handle.dispose;
+        })
+      );
+
+      // 启动时先同步一次开关；之后每次设置页保存完会再同步（见 SettingsPage 的 onEntriesChanged）
+      try {
+        fetchState()
+          .then(function (payload) {
+            setEntryState(payload && payload.config ? payload.config.entries : null);
+            notifyEntryListeners();
+          })
+          .catch(function () {
+            /* 拿不到就按默认值 */
+          });
       } catch (error) {
+        /* 忽略 */
+      }
+
+      ctx.effect(function () {
+        return function () {
+          for (const handle of entryHandles) {
+            try {
+              handle.dispose();
+            } catch (error) {
+              /* 忽略 */
+            }
+          }
+          entryHandles.length = 0;
+          for (const dispose of entries) {
+            try {
+              if (typeof dispose === 'function') dispose();
+            } catch (error) {
+              /* 忽略 */
+            }
+          }
+        };
+      }, 'dsh-dingtalk-self: entries');
+    }
+
+    /** 保存成功后让所有入口组件重新取开关状态。 */
+    const entryListeners = new Set();
+    function notifyEntryListeners() {
+      for (const handle of entryHandles) {
         try {
-          if (typeof console !== 'undefined' && console.error) console.error('[dsh-dingtalk-self] 注册设置页失败', error);
-        } catch (ignored) {
+          handle.update();
+        } catch (error) {
+          /* 忽略 */
+        }
+      }
+      for (const listener of Array.from(entryListeners)) {
+        try {
+          listener();
+        } catch (error) {
           /* 忽略 */
         }
       }

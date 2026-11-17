@@ -54,3 +54,29 @@ test('schema 解析：可用时是 schemastery 对象，不可用时退回纯对
   assert.equal(DEFAULTS.mode, 'draft');
   assert.equal(DEFAULTS.enabled, false);
 });
+
+// ---------- 入口开关 ----------
+
+test('entries 默认值：设置页与插件页开，侧栏与会话视图关', async () => {
+  const { withDefaults, DEFAULTS } = await import('../lib/settings.js');
+  const cfg = withDefaults({});
+  assert.deepEqual(cfg.entries, { settings: true, pluginsPage: true, sidebar: false, conversationView: false });
+  assert.deepEqual(DEFAULTS.entries, cfg.entries);
+});
+
+test('entries 全关时强制保留设置页入口', async () => {
+  const { withDefaults } = await import('../lib/settings.js');
+  const cfg = withDefaults({ entries: { settings: false, pluginsPage: false, sidebar: false, conversationView: false } });
+  assert.equal(cfg.entries.settings, true, '至少要留一个入口');
+});
+
+test('validatePatch 拒绝把入口全关掉', async () => {
+  const { validatePatch } = await import('../lib/settings.js');
+  const bad = validatePatch({ entries: { settings: false, pluginsPage: false, sidebar: false, conversationView: false } });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /至少要保留一个入口/);
+  const good = validatePatch({ entries: { sidebar: true } });
+  assert.equal(good.ok, true);
+  const notBool = validatePatch({ entries: { sidebar: 'yes' } });
+  assert.equal(notBool.ok, false);
+});
