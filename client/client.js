@@ -1449,6 +1449,7 @@ window.__ModuleLoader__.load({
       const surface = typeof props.surface === 'string' ? props.surface : 'settings';
       const wide = surface === 'main' || surface === 'view';
       const rootClass = wide ? 'dws-root dws-root-wide' : 'dws-root';
+      const rootRef = React.useRef(null);
       const lang = useLang(props);
       const t = React.useCallback(function (key, params) {
         return translate(key, params);
@@ -1553,6 +1554,55 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         load('initial');
       }, [load]);
+
+      /**
+       * 整页模式的滚动兜底。
+       *
+       * 主栏面板（flex 父容器）会给出确定高度，.dws-root-wide 自然可滚；
+       * 但会话视图的父容器不保证这一点（父链可能是 display:contents），
+       * 那时根会被内容撑高，max-height:100% 解析失败，就滚不动了。
+       * 这里只在这种情况下量一次可用高度，把 max-height 钉死，让根自己滚。
+       * 父容器已经给了约束时不动，避免和 flex 布局打架。
+       */
+      React.useEffect(function () {
+        if (!wide) return undefined;
+        const el = rootRef.current;
+        if (!el) return undefined;
+        const measure = function () {
+          const node = rootRef.current;
+          if (!node) return;
+          node.style.maxHeight = '';
+          const viewport = window.innerHeight || 800;
+          const rect = node.getBoundingClientRect();
+          // 关键判据：可见区域是否超出窗口。
+          // 只看「能不能滚」不够——会话视图里根的高度按父容器算（可能是整个
+          // mainPanel），底部会伸到窗口外面，内容看着被截断，用户以为滚不动。
+          if (rect.bottom <= viewport - 4) return;
+          const room = viewport - Math.max(0, Math.round(rect.top)) - 12;
+          if (room < 200) return;
+          node.style.maxHeight = Math.round(room) + 'px';
+        };
+        measure();
+        let timer = null;
+        const onResize = function () {
+          if (timer !== null) clearTimeout(timer);
+          timer = setTimeout(measure, 120);
+        };
+        try {
+          window.addEventListener('resize', onResize);
+        } catch (error) {
+          /* 忽略 */
+        }
+        return function () {
+          if (timer !== null) clearTimeout(timer);
+          try {
+            window.removeEventListener('resize', onResize);
+          } catch (error) {
+            /* 忽略 */
+          }
+          if (rootRef.current) rootRef.current.style.maxHeight = '';
+        };
+      }, [wide, activeTab, status, data]);
 
       async function loadModels() {
         setModelLoading(true);
@@ -3796,7 +3846,7 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { className: rootClass },
+        { className: rootClass, ref: rootRef },
         styleNode,
         pageHead,
         actionError ? h('p', { className: 'dws-banner dws-banner-error', role: 'alert' }, actionError) : null,
