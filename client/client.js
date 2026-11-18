@@ -1076,11 +1076,29 @@ window.__ModuleLoader__.load({
     const CSS = `
 .dws-root { display: flex; flex-direction: column; gap: 14px; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; padding: 2px 0 10px; }
 .dws-root, .dws-root * { box-sizing: border-box; }
-.dws-root-wide { padding: 18px 24px 32px; max-width: 1080px; margin: 0 auto; width: 100%; gap: 16px; }
+.dws-root-wide {
+  /* 主栏/会话视图是整页：自己撑满可用高度并在内部滚动，
+     否则内容会把 mainPanel 撑高、页面却滚不动。 */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 48px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  gap: 16px;
+}
+.dws-root-wide .dws-page-head { padding-bottom: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dws-root-wide .dws-page-title { font-size: 20px; }
+.dws-root-wide .dws-card { padding: 16px 18px; gap: 12px; }
+/* 宽屏下把信息类网格固定成 3 列，避免 auto-fit 在 900px 宽时拉出过大的空隙 */
+.dws-root-wide .dws-kv { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 20px; }
+.dws-root-wide .dws-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; }
 .dws-entry-list { display: flex; flex-direction: column; gap: 12px; }
 .dws-entry-row { display: flex; flex-direction: column; gap: 2px; }
 .dws-entry-hint { margin: 0; padding-left: 22px; }
+.dws-root-wide .dws-entry-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
 .dws-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .dws-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dws-head-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
