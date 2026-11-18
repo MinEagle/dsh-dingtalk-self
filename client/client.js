@@ -1101,30 +1101,22 @@ window.__ModuleLoader__.load({
 .dws-root { display: flex; flex-direction: column; gap: 14px; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; padding: 2px 0 10px; }
 .dws-root, .dws-root * { box-sizing: border-box; }
 .dws-root-wide {
-  /* 主栏/会话视图是整页：根只负责布局，滚动交给 .dws-tab-body，
-     这样 Tab 栏始终固定在顶部，不跟着内容滚走。 */
+  /* 主栏 / 会话视图都是整页。这里让「根自己滚 + Tab 吸顶」：
+     父容器给了确定高度时根在内部滚动、Tab 固定；
+     父容器没给高度时根按内容撑开、由外层滚动，不会出现「滚不动」。
+     不用 height:100% + overflow:hidden，那会在无确定高度时把内容裁掉。 */
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
-  height: 100%;
-  padding: 20px 24px 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 96px;
   width: 100%;
   max-width: 920px;
   margin: 0 auto;
-  gap: 0;
-}
-.dws-root-wide .dws-page-head { flex: none; }
-.dws-root-wide .dws-tab-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
   gap: 16px;
-  padding: 16px 0 96px;
 }
-.dws-root-wide .dws-savebar-card { flex: none; margin-bottom: 16px; }
+.dws-root-wide .dws-tab-body { display: flex; flex-direction: column; gap: 16px; }
 .dws-root-wide .dws-page-head { padding-bottom: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dws-root-wide .dws-page-title { font-size: 20px; }
 .dws-root-wide .dws-card { padding: 16px 18px; gap: 12px; }
@@ -2509,7 +2501,8 @@ window.__ModuleLoader__.load({
         { id: 'records', key: 'tabRecords' },
         { id: 'entries', key: 'tabEntries' },
       ];
-      const TABS_DIALOG = ['overview', 'contacts', 'behavior'];
+      // 设置弹窗也显示全部 Tab；窄的时候 Tab 栏横向滚动，不换行。
+      const TABS_DIALOG = ['overview', 'contacts', 'behavior', 'test', 'records', 'entries'];
 
       function renderTabs() {
         const wideSurface = surface === 'main' || surface === 'view';
@@ -2611,8 +2604,7 @@ window.__ModuleLoader__.load({
                 h('span', null, t('enabledLabel'))
               )
             )
-          ),
-          h('p', { className: 'dws-hint' }, t('enabledHint'))
+          )
         );
       }
 
