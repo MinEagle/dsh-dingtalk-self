@@ -47,6 +47,9 @@ window.__ModuleLoader__.load({
       pausedOff: '运行中',
       pausedShort: '已暂停',
       runningShort: '运行中',
+      disabledShort: '已关闭',
+      masterSwitchTitle: '总开关',
+      masterSwitchDesc: '关掉后不读取、不生成、不发送。',
       version: '版本',
       bootedAt: '启动时间',
       dataDir: '状态目录',
@@ -308,6 +311,9 @@ window.__ModuleLoader__.load({
       pausedOff: 'Running',
       pausedShort: 'Paused',
       runningShort: 'Running',
+      disabledShort: 'Off',
+      masterSwitchTitle: 'Master switch',
+      masterSwitchDesc: 'When off, nothing is read, generated or sent.',
       version: 'Version',
       bootedAt: 'Started at',
       dataDir: 'Data directory',
@@ -1095,18 +1101,30 @@ window.__ModuleLoader__.load({
 .dws-root { display: flex; flex-direction: column; gap: 14px; color: var(--dsw-alias-label-primary); font-size: 13px; line-height: 1.55; padding: 2px 0 10px; }
 .dws-root, .dws-root * { box-sizing: border-box; }
 .dws-root-wide {
-  /* 主栏/会话视图是整页：自己撑满可用高度并在内部滚动，
-     否则内容会把 mainPanel 撑高、页面却滚不动。 */
+  /* 主栏/会话视图是整页：根只负责布局，滚动交给 .dws-tab-body，
+     这样 Tab 栏始终固定在顶部，不跟着内容滚走。 */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  height: 100%;
+  padding: 20px 24px 0;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  gap: 0;
+}
+.dws-root-wide .dws-page-head { flex: none; }
+.dws-root-wide .dws-tab-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 20px 24px 96px;
-  width: 100%;
-  max-width: 920px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  padding: 16px 0 96px;
 }
+.dws-root-wide .dws-savebar-card { flex: none; margin-bottom: 16px; }
 .dws-root-wide .dws-page-head { padding-bottom: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dws-root-wide .dws-page-title { font-size: 20px; }
 .dws-root-wide .dws-card { padding: 16px 18px; gap: 12px; }
@@ -1120,6 +1138,17 @@ window.__ModuleLoader__.load({
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   overflow-x: auto;
   scrollbar-width: none;
+  /* 吸顶：整页和设置弹窗都只有内容区滚动，Tab 栏固定。
+     flex: none + min-height 必须写——overflow-x:auto 会让自动最小高度变成 0，
+     在固定高度的 flex 列里会被压扁成 1px（只剩 border）。 */
+  flex: none;
+  min-height: 37px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--dsw-alias-bg-layer-1);
+  backdrop-filter: blur(10px) saturate(1.3);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
 }
 .dws-tabs::-webkit-scrollbar { display: none; }
 .dws-tab {
@@ -1148,7 +1177,6 @@ window.__ModuleLoader__.load({
 .dws-tab-badge-warn { background: var(--dsw-alias-state-warn-primary); }
 .dws-tab-stack { display: flex; flex-direction: column; gap: 16px; }
 .dws-overview-alert { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.dws-root-wide .dws-tabs { position: sticky; top: 0; z-index: 3; background: var(--dsw-alias-bg-layer-1); backdrop-filter: blur(8px); }
 .dws-entry-list { display: flex; flex-direction: column; gap: 12px; }
 .dws-entry-row { display: flex; flex-direction: column; gap: 2px; }
 .dws-entry-hint { margin: 0; padding-left: 22px; }
@@ -2548,6 +2576,46 @@ window.__ModuleLoader__.load({
         );
       }
 
+      /** 总开关：放概览最上面，一眼看到现在到底在不在跑。 */
+      function renderMasterSwitch() {
+        const config = draft || data.config || {};
+        const enabled = config.enabled === true;
+        const paused = data.paused === true;
+        return h(
+          'section',
+          { className: 'dws-card' },
+          h(
+            'div',
+            { className: 'dws-card-head' },
+            h(
+              'div',
+              { className: 'dws-head-text' },
+              h('h3', { className: 'dws-title' }, t('masterSwitchTitle')),
+              h('p', { className: 'dws-sub' }, t('masterSwitchDesc'))
+            ),
+            h(
+              'div',
+              { className: 'dws-head-actions' },
+              badge(paused ? 'warn' : enabled ? 'ok' : 'muted', paused ? t('pausedShort') : enabled ? t('runningShort') : t('disabledShort')),
+              h(
+                'label',
+                { className: 'dws-switch' },
+                h('input', {
+                  type: 'checkbox',
+                  checked: enabled,
+                  'aria-label': t('enabledLabel'),
+                  onChange: function (event) {
+                    setField('enabled', event.target.checked);
+                  },
+                }),
+                h('span', null, t('enabledLabel'))
+              )
+            )
+          ),
+          h('p', { className: 'dws-hint' }, t('enabledHint'))
+        );
+      }
+
       function renderTabPanel() {
         const wideSurface = surface === 'main' || surface === 'view';
         const tabs = wideSurface ? TABS_FULL.map((item) => item.id) : TABS_DIALOG;
@@ -2559,7 +2627,7 @@ window.__ModuleLoader__.load({
         if (current === 'records') {
           return h('div', { className: 'dws-tab-stack' }, renderPendingDrafts(), renderRecentDrafts(), renderAudit());
         }
-        return h('div', { className: 'dws-tab-stack' }, renderOverviewAlert(), renderStatus());
+        return h('div', { className: 'dws-tab-stack' }, renderOverviewAlert(), renderMasterSwitch(), renderStatus());
       }
 
       function renderStatus() {
@@ -3010,25 +3078,8 @@ window.__ModuleLoader__.load({
               h('h3', { className: 'dws-title' }, t('behaviorTitle')),
               timeZone ? h('p', { className: 'dws-sub' }, t('timeZoneNote', { tz: timeZone })) : null
             ),
-            h(
-              'div',
-              { className: 'dws-head-actions' },
-              h(
-                'label',
-                { className: 'dws-switch' },
-                h('input', {
-                  type: 'checkbox',
-                  checked: config.enabled === true,
-                  'aria-label': t('enabledLabel'),
-                  onChange: function (event) {
-                    setField('enabled', event.target.checked);
-                  },
-                }),
-                h('span', null, t('enabledLabel'))
-              )
-            )
+            null
           ),
-          h('p', { className: 'dws-hint' }, t('enabledHint')),
           h(
             'div',
             { className: 'dws-field' },
@@ -3758,7 +3809,7 @@ window.__ModuleLoader__.load({
         pageHead,
         actionError ? h('p', { className: 'dws-banner dws-banner-error', role: 'alert' }, actionError) : null,
         renderTabs(),
-        renderTabPanel(),
+        h('div', { className: 'dws-tab-body' }, renderTabPanel()),
         dirty ? renderSaveBar() : null,
         toast
           ? h(
