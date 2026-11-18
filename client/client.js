@@ -1117,6 +1117,10 @@ window.__ModuleLoader__.load({
   gap: 16px;
 }
 .dws-root-wide .dws-tab-body { display: flex; flex-direction: column; gap: 16px; }
+/* 会话视图里宿主的输入框浮在底部，固定让出它的位置，避免最后几行被盖住。
+   高度按宿主 composer 的实际占用（输入框 + 下方环境条目）取值。 */
+.dws-root-view { padding-bottom: 152px; }
+.dws-root-view .dws-tab-body { padding-bottom: 8px; }
 .dws-root-wide .dws-page-head { padding-bottom: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dws-root-wide .dws-page-title { font-size: 20px; }
 .dws-root-wide .dws-card { padding: 16px 18px; gap: 12px; }
@@ -1169,6 +1173,7 @@ window.__ModuleLoader__.load({
 .dws-tab-badge-warn { background: var(--dsw-alias-state-warn-primary); }
 .dws-tab-stack { display: flex; flex-direction: column; gap: 16px; }
 .dws-overview-alert { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dws-composer-probe { height: 0; min-height: 0; overflow: hidden; pointer-events: none; }
 .dws-entry-list { display: flex; flex-direction: column; gap: 12px; }
 .dws-entry-row { display: flex; flex-direction: column; gap: 2px; }
 .dws-entry-hint { margin: 0; padding-left: 22px; }
@@ -1371,6 +1376,77 @@ window.__ModuleLoader__.load({
       return next;
     }
 
+    /**
+     * 输入框（composer）在会话视图里始终渲染，会盖住页面底部。
+     * 宿主没给「composer 多高」的接口，所以在 conversation.composer.dock
+     * （宿主明确提供的「输入框卡片下方」插槽）放一个 0 高度探针，
+     * 它到窗口底边的距离就是输入框（含下方环境条目）占的高度。
+     * 只读自己元素的位置，不去碰宿主 DOM。
+     */
+    let composerGap = 0;
+    const composerGapListeners = new Set();
+
+    function setComposerGap(value) {
+      const next = Math.max(0, Math.round(value));
+      if (next === composerGap) return;
+      composerGap = next;
+      for (const listener of Array.from(composerGapListeners)) {
+        try {
+          listener();
+        } catch (error) {
+          /* 忽略 */
+        }
+      }
+    }
+
+    function ComposerGapProbe() {
+      const ref = React.useRef(null);
+      React.useEffect(function () {
+        const measure = function () {
+          const el = ref.current;
+          if (!el) return;
+          const rect = el.getBoundingClientRect();
+          const viewport = window.innerHeight || 0;
+          if (!viewport || rect.top <= 0) return;
+          setComposerGap(viewport - rect.top);
+        };
+        measure();
+        let observer = null;
+        try {
+          if (typeof ResizeObserver === 'function') {
+            observer = new ResizeObserver(measure);
+            if (document.body) observer.observe(document.body);
+          }
+        } catch (error) {
+          observer = null;
+        }
+        let timer = null;
+        const onResize = function () {
+          if (timer !== null) clearTimeout(timer);
+          timer = setTimeout(measure, 120);
+        };
+        try {
+          window.addEventListener('resize', onResize);
+        } catch (error) {
+          /* 忽略 */
+        }
+        return function () {
+          if (timer !== null) clearTimeout(timer);
+          try {
+            if (observer) observer.disconnect();
+          } catch (error) {
+            /* 忽略 */
+          }
+          try {
+            window.removeEventListener('resize', onResize);
+          } catch (error) {
+            /* 忽略 */
+          }
+        };
+      }, []);
+      return h('div', { ref: ref, className: 'dws-composer-probe', 'aria-hidden': 'true' });
+    }
+
     /** 最近一次读到的入口开关；注册与注销都看它。 */
     let entryState = normalizeEntries(null);
     /** 已注册入口的句柄，开关变化时逐个 update()。 */
@@ -1448,7 +1524,12 @@ window.__ModuleLoader__.load({
       // surface：'settings' 弹窗 | 'main' 主栏整页 | 'view' 会话视图 | 'pluginPage' 插件页
       const surface = typeof props.surface === 'string' ? props.surface : 'settings';
       const wide = surface === 'main' || surface === 'view';
-      const rootClass = wide ? 'dws-root dws-root-wide' : 'dws-root';
+      const rootClass =
+        surface === 'view'
+          ? 'dws-root dws-root-wide dws-root-view'
+          : wide
+            ? 'dws-root dws-root-wide'
+            : 'dws-root';
       const rootRef = React.useRef(null);
       const lang = useLang(props);
       const t = React.useCallback(function (key, params) {
@@ -1572,17 +1653,23 @@ window.__ModuleLoader__.load({
           const node = rootRef.current;
           if (!node) return;
           node.style.maxHeight = '';
+          // 视图模式的底部留白：CSS 给了 152px 默认值，
+          // 探针（composer.dock）量到真实高度时用真实值覆盖。
+          node.style.paddingBottom = surface === 'view' && composerGap > 0 ? String(composerGap + 24) + 'px' : '';
           const viewport = window.innerHeight || 800;
           const rect = node.getBoundingClientRect();
-          // 关键判据：可见区域是否超出窗口。
-          // 只看「能不能滚」不够——会话视图里根的高度按父容器算（可能是整个
-          // mainPanel），底部会伸到窗口外面，内容看着被截断，用户以为滚不动。
+
+          // 底部超出窗口 → 钉死高度让根自己滚
           if (rect.bottom <= viewport - 4) return;
           const room = viewport - Math.max(0, Math.round(rect.top)) - 12;
           if (room < 200) return;
           node.style.maxHeight = Math.round(room) + 'px';
         };
         measure();
+        const onGap = function () {
+          measure();
+        };
+        composerGapListeners.add(onGap);
         let timer = null;
         const onResize = function () {
           if (timer !== null) clearTimeout(timer);
@@ -1595,12 +1682,16 @@ window.__ModuleLoader__.load({
         }
         return function () {
           if (timer !== null) clearTimeout(timer);
+          composerGapListeners.delete(onGap);
           try {
             window.removeEventListener('resize', onResize);
           } catch (error) {
             /* 忽略 */
           }
-          if (rootRef.current) rootRef.current.style.maxHeight = '';
+          if (rootRef.current) {
+            rootRef.current.style.maxHeight = '';
+            rootRef.current.style.paddingBottom = '';
+          }
         };
       }, [wide, activeTab, status, data]);
 
@@ -4081,6 +4172,21 @@ window.__ModuleLoader__.load({
           };
           entryHandles.push(pair);
           return pair.dispose;
+        })
+      );
+
+      // ⑤ 输入框高度探针（只在会话视图里有意义，注册成本极低）
+      entries.push(
+        ctx.slots.inject('conversation.composer.dock', function () {
+          try {
+            const off = ctx.slots.register(
+              { name: 'conversation.composer.dock', id: 'dingtalk-self-probe', order: -100 },
+              ComposerGapProbe
+            );
+            return typeof off === 'function' ? off : function () {};
+          } catch (error) {
+            return function () {};
+          }
         })
       );
 
