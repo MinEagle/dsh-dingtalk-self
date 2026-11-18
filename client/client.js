@@ -214,6 +214,15 @@ window.__ModuleLoader__.load({
       invalidMaxRepliesPerHour: '每小时上限需为 1–120 的整数',
       invalidMaxReplyChars: '回复字数上限需为 20–4000 的整数',
 
+      tabOverview: '概览',
+      tabContacts: '联系人',
+      tabBehavior: '行为',
+      tabTest: '测试',
+      tabRecords: '记录',
+      tabEntries: '入口',
+      overviewAlertDrafts: '有 {n} 条待确认草稿',
+      overviewAlertErrors: '最近一轮有 {n} 个错误',
+      overviewAlertGo: '去处理',
       entriesTitle: '入口',
       entriesDesc: '控制钉钉代答出现在哪里。至少保留一个入口，否则配置页会打不开。',
       entrySettings: '设置页入口',
@@ -466,6 +475,15 @@ window.__ModuleLoader__.load({
       invalidMaxRepliesPerHour: 'Replies per hour must be an integer between 1 and 120',
       invalidMaxReplyChars: 'Reply length cap must be an integer between 20 and 4000',
 
+      tabOverview: 'Overview',
+      tabContacts: 'Contacts',
+      tabBehavior: 'Behavior',
+      tabTest: 'Test',
+      tabRecords: 'Records',
+      tabEntries: 'Entry points',
+      overviewAlertDrafts: '{n} draft(s) waiting for confirmation',
+      overviewAlertErrors: '{n} error(s) in the last cycle',
+      overviewAlertGo: 'Review',
       entriesTitle: 'Entry points',
       entriesDesc: 'Where DingTalk auto-answer appears. Keep at least one entry open, or the settings page cannot be reached.',
       entrySettings: 'Settings page',
@@ -1083,7 +1101,7 @@ window.__ModuleLoader__.load({
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 20px 24px 48px;
+  padding: 20px 24px 96px;
   width: 100%;
   max-width: 920px;
   margin: 0 auto;
@@ -1095,6 +1113,42 @@ window.__ModuleLoader__.load({
 /* 宽屏下把信息类网格固定成 3 列，避免 auto-fit 在 900px 宽时拉出过大的空隙 */
 .dws-root-wide .dws-kv { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 20px; }
 .dws-root-wide .dws-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; }
+.dws-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dws-tabs::-webkit-scrollbar { display: none; }
+.dws-tab {
+  appearance: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 8px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dws-tab:hover { color: var(--dsw-alias-label-primary); }
+.dws-tab-active { color: var(--dsw-alias-label-primary); border-bottom-color: var(--dsw-alias-button-info-fill, #4176e6); font-weight: 600; }
+.dws-tab-badge {
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--dsw-alias-state-error-primary); color: #fff;
+  font-size: 11px; line-height: 16px; text-align: center; font-weight: 600;
+}
+.dws-tab-badge-warn { background: var(--dsw-alias-state-warn-primary); }
+.dws-tab-stack { display: flex; flex-direction: column; gap: 16px; }
+.dws-overview-alert { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dws-root-wide .dws-tabs { position: sticky; top: 0; z-index: 3; background: var(--dsw-alias-bg-layer-1); backdrop-filter: blur(8px); }
 .dws-entry-list { display: flex; flex-direction: column; gap: 12px; }
 .dws-entry-row { display: flex; flex-direction: column; gap: 2px; }
 .dws-entry-hint { margin: 0; padding-left: 22px; }
@@ -1208,7 +1262,16 @@ window.__ModuleLoader__.load({
 .dws-audit-row:last-child { border-bottom: none; }
 .dws-audit-time { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dws-audit-detail { color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
-.dws-savebar-card { position: sticky; bottom: 0; z-index: 6; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); box-shadow: 0 -6px 16px rgba(0,0,0,0.06); }
+.dws-savebar-card {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.08);
+}
 .dws-toast { position: fixed; right: 20px; bottom: 20px; z-index: 20; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px 14px; font-size: 12px; background: var(--dsw-alias-bg-layer-1); }
 .dws-toast-ok { color: var(--dsw-alias-state-success-primary); border-color: var(--dsw-alias-state-success-primary); }
 .dws-toast-error { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }
@@ -1383,6 +1446,7 @@ window.__ModuleLoader__.load({
       const [modelCatalog, setModelCatalog] = React.useState(null);
       const [modelLoadError, setModelLoadError] = React.useState('');
       const [modelLoading, setModelLoading] = React.useState(true);
+      const [activeTab, setActiveTab] = React.useState('overview');
       const [testMessage, setTestMessage] = React.useState('');
       const [testPhase, setTestPhase] = React.useState('idle');
       const [testResult, setTestResult] = React.useState(null);
@@ -2406,6 +2470,96 @@ window.__ModuleLoader__.load({
           noNew ? h('span', { className: 'dws-cycle-muted' }, t('cycleNoNew')) : null,
           chips.length > 0 ? h('span', { className: 'dws-stats' }, chips) : null
         );
+      }
+
+      /** 整页有 6 个 Tab；设置弹窗太窄，只保留前 3 个核心页。 */
+      const TABS_FULL = [
+        { id: 'overview', key: 'tabOverview' },
+        { id: 'contacts', key: 'tabContacts' },
+        { id: 'behavior', key: 'tabBehavior' },
+        { id: 'test', key: 'tabTest' },
+        { id: 'records', key: 'tabRecords' },
+        { id: 'entries', key: 'tabEntries' },
+      ];
+      const TABS_DIALOG = ['overview', 'contacts', 'behavior'];
+
+      function renderTabs() {
+        const wideSurface = surface === 'main' || surface === 'view';
+        const tabs = wideSurface ? TABS_FULL : TABS_FULL.filter((item) => TABS_DIALOG.indexOf(item.id) >= 0);
+        const pendingCount = Array.isArray(data.pendingConfirm) ? data.pendingConfirm.length : 0;
+        const errorCount = Number((data.stats && data.stats.errors) || 0);
+        return h(
+          'nav',
+          { className: 'dws-tabs', role: 'tablist' },
+          tabs.map(function (item) {
+            const active = item.id === activeTab;
+            const badgeCount = item.id === 'records' ? pendingCount : 0;
+            const errBadge = item.id === 'overview' ? errorCount : 0;
+            return h(
+              'button',
+              {
+                key: item.id,
+                type: 'button',
+                role: 'tab',
+                'aria-selected': active ? 'true' : 'false',
+                className: active ? 'dws-tab dws-tab-active' : 'dws-tab',
+                onClick: function () {
+                  setActiveTab(item.id);
+                },
+              },
+              t(item.key),
+              badgeCount > 0
+                ? h('span', { className: 'dws-tab-badge', 'aria-label': String(badgeCount) }, badgeCount > 99 ? '99+' : String(badgeCount))
+                : null,
+              errBadge > 0
+                ? h('span', { className: 'dws-tab-badge dws-tab-badge-warn', 'aria-label': String(errBadge) }, errBadge > 99 ? '99+' : String(errBadge))
+                : null
+            );
+          })
+        );
+      }
+
+      /** 概览顶部提示条：有待确认草稿或最近一轮有错时，直接指出并跳到对应 Tab。 */
+      function renderOverviewAlert() {
+        const pendingCount = Array.isArray(data.pendingConfirm) ? data.pendingConfirm.length : 0;
+        const errorCount = Number((data.stats && data.stats.errors) || 0);
+        if (pendingCount === 0 && errorCount === 0) return null;
+        const messages = [];
+        if (pendingCount > 0) messages.push(t('overviewAlertDrafts', { n: pendingCount }));
+        if (errorCount > 0) messages.push(t('overviewAlertErrors', { n: errorCount }));
+        const target = pendingCount > 0 ? 'records' : 'overview';
+        return h(
+          'div',
+          { className: 'dws-banner dws-overview-alert', role: 'status' },
+          h('span', null, messages.join(' · ')),
+          target === 'records'
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'dws-btn dws-btn-small',
+                  onClick: function () {
+                    setActiveTab('records');
+                  },
+                },
+                t('overviewAlertGo')
+              )
+            : null
+        );
+      }
+
+      function renderTabPanel() {
+        const wideSurface = surface === 'main' || surface === 'view';
+        const tabs = wideSurface ? TABS_FULL.map((item) => item.id) : TABS_DIALOG;
+        const current = tabs.indexOf(activeTab) >= 0 ? activeTab : tabs[0];
+        if (current === 'contacts') return renderContacts();
+        if (current === 'behavior') return renderBehavior();
+        if (current === 'test') return renderTestReply();
+        if (current === 'entries') return renderEntries();
+        if (current === 'records') {
+          return h('div', { className: 'dws-tab-stack' }, renderPendingDrafts(), renderRecentDrafts(), renderAudit());
+        }
+        return h('div', { className: 'dws-tab-stack' }, renderOverviewAlert(), renderStatus());
       }
 
       function renderStatus() {
@@ -3603,14 +3757,8 @@ window.__ModuleLoader__.load({
         styleNode,
         pageHead,
         actionError ? h('p', { className: 'dws-banner dws-banner-error', role: 'alert' }, actionError) : null,
-        renderStatus(),
-        renderContacts(),
-        renderTestReply(),
-        renderBehavior(),
-        renderEntries(),
-        renderPendingDrafts(),
-        renderRecentDrafts(),
-        renderAudit(),
+        renderTabs(),
+        renderTabPanel(),
         dirty ? renderSaveBar() : null,
         toast
           ? h(
