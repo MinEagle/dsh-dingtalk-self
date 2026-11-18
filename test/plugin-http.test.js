@@ -87,7 +87,8 @@ test('apply() 注册设置命名空间、自动页策略与 HTTP 路由', () => 
     '/dsh-dingtalk-self/api/contacts/search',
     '/dsh-dingtalk-self/api/cycle',
     '/dsh-dingtalk-self/api/models',
-    '/dsh-dingtalk-self/api/test-reply'
+    '/dsh-dingtalk-self/api/test-reply',
+    '/dsh-dingtalk-self/api/stats/reset'
   ]);
   assert.ok(routes.every((r) => r.kind === 'exact'), 'exact 路由：prefix 在本宿主不匹配子路径');
   assert.deepEqual(calls.map((c) => c[0]), ['register', 'configure']);

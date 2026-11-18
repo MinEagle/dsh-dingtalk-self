@@ -226,6 +226,15 @@ window.__ModuleLoader__.load({
       overviewAlertDrafts: '有 {n} 条待确认草稿',
       overviewAlertErrors: '最近一轮有 {n} 个错误',
       overviewAlertGo: '去处理',
+      statsReset: '重置统计',
+      statsResetTitle: '统计是从装好那天起累计的，只增不减；清零后显示的就是当前状态。',
+      statsResetConfirm: '把统计计数全部归零？审计记录会保留。',
+      statsResetConfirmAudit: '把统计计数归零，并清空全部审计记录？此操作不可撤销。',
+      statsResetOnlyStats: '只清统计',
+      statsResetWithAudit: '统计 + 审计一起清',
+      statsResetDone: '统计已重置',
+      statsResetDoneAudit: '统计和审计都已清空',
+      cancel: '取消',
       entriesTitle: '入口',
       entriesDesc: '控制钉钉代答出现在哪里。至少保留一个入口，否则配置页会打不开。',
       entrySettings: '设置页入口',
@@ -490,6 +499,15 @@ window.__ModuleLoader__.load({
       overviewAlertDrafts: '{n} draft(s) waiting for confirmation',
       overviewAlertErrors: '{n} error(s) in the last cycle',
       overviewAlertGo: 'Review',
+      statsReset: 'Reset counters',
+      statsResetTitle: 'Counters accumulate since install and never decrease; resetting shows the current state instead.',
+      statsResetConfirm: 'Reset all counters to zero? Audit records are kept.',
+      statsResetConfirmAudit: 'Reset counters and clear every audit record? This cannot be undone.',
+      statsResetOnlyStats: 'Counters only',
+      statsResetWithAudit: 'Counters and audit',
+      statsResetDone: 'Counters reset',
+      statsResetDoneAudit: 'Counters and audit cleared',
+      cancel: 'Cancel',
       entriesTitle: 'Entry points',
       entriesDesc: 'Where DingTalk auto-answer appears. Keep at least one entry open, or the settings page cannot be reached.',
       entrySettings: 'Settings page',
@@ -1117,9 +1135,10 @@ window.__ModuleLoader__.load({
   gap: 16px;
 }
 .dws-root-wide .dws-tab-body { display: flex; flex-direction: column; gap: 16px; }
-/* 会话视图里宿主的输入框浮在底部，固定让出它的位置，避免最后几行被盖住。
-   高度按宿主 composer 的实际占用（输入框 + 下方环境条目）取值。 */
-.dws-root-view { padding-bottom: 152px; }
+/* 会话视图里宿主的输入框浮在底部。默认先按「视口减去输入框高度」收窄，
+   探针量到真实高度后由 JS 覆盖成精确值（见 SettingsPage 的 measure）。
+   注意不能只加 padding-bottom：滚动视口本身还在输入框底下，滚到底仍会被盖。 */
+.dws-root-view { max-height: calc(100vh - 190px); padding-bottom: 16px; }
 .dws-root-view .dws-tab-body { padding-bottom: 8px; }
 .dws-root-wide .dws-page-head { padding-bottom: 10px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .dws-root-wide .dws-page-title { font-size: 20px; }
@@ -1222,7 +1241,10 @@ window.__ModuleLoader__.load({
 .dws-banner { margin: 0; border: 1px solid var(--dsw-alias-border-l1); border-left: 3px solid var(--dsw-alias-state-warn-primary); border-radius: 6px; padding: 7px 10px; font-size: 12px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
 .dws-banner-error { border-left-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); }
 .dws-error-text { margin: 0; font-size: 12px; color: var(--dsw-alias-state-error-primary); overflow-wrap: anywhere; }
-.dws-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.dws-stats { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dws-stats-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dws-reset-panel { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--dsw-alias-bg-layer-2); }
+.dws-reset-panel .dws-hint { margin: 0; }
 .dws-textarea { resize: vertical; min-height: 64px; line-height: 1.5; font-family: inherit; }
 .dws-warn-text { margin: 0; font-size: 12px; color: var(--dsw-alias-state-warn-primary); overflow-wrap: anywhere; }
 .dws-render-list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -1378,9 +1400,10 @@ window.__ModuleLoader__.load({
 
     /**
      * 输入框（composer）在会话视图里始终渲染，会盖住页面底部。
-     * 宿主没给「composer 多高」的接口，所以在 conversation.composer.dock
-     * （宿主明确提供的「输入框卡片下方」插槽）放一个 0 高度探针，
-     * 它到窗口底边的距离就是输入框（含下方环境条目）占的高度。
+     * 宿主没给「composer 多高」的接口，所以在 conversation.input.dock
+     * （宿主明确提供的「输入框卡片上方」插槽）放一个 0 高度探针。
+     * 它的下边缘就是输入框卡片的上边缘，所以「窗口底 - 探针底」=
+     * 输入框（含下方状态条）占掉的高度。
      * 只读自己元素的位置，不去碰宿主 DOM。
      */
     let composerGap = 0;
@@ -1407,8 +1430,12 @@ window.__ModuleLoader__.load({
           if (!el) return;
           const rect = el.getBoundingClientRect();
           const viewport = window.innerHeight || 0;
-          if (!viewport || rect.top <= 0) return;
-          setComposerGap(viewport - rect.top);
+          if (!viewport) return;
+          // 探针贴着输入框卡片上沿：窗口底到它下边缘的距离就是被占的高度。
+          // 新会话（hero）状态输入框浮在中间，这个值会很大，用范围挡掉。
+          const gap = viewport - rect.bottom;
+          if (gap < 40 || gap > viewport * 0.7) return;
+          setComposerGap(gap);
         };
         measure();
         let observer = null;
@@ -1549,6 +1576,7 @@ window.__ModuleLoader__.load({
       const [modelLoadError, setModelLoadError] = React.useState('');
       const [modelLoading, setModelLoading] = React.useState(true);
       const [activeTab, setActiveTab] = React.useState('overview');
+      const [resetOpen, setResetOpen] = React.useState(false);
       const [testMessage, setTestMessage] = React.useState('');
       const [testPhase, setTestPhase] = React.useState('idle');
       const [testResult, setTestResult] = React.useState(null);
@@ -1653,15 +1681,25 @@ window.__ModuleLoader__.load({
           const node = rootRef.current;
           if (!node) return;
           node.style.maxHeight = '';
-          // 视图模式的底部留白：CSS 给了 152px 默认值，
-          // 探针（composer.dock）量到真实高度时用真实值覆盖。
-          node.style.paddingBottom = surface === 'view' && composerGap > 0 ? String(composerGap + 24) + 'px' : '';
+          node.style.paddingBottom = '';
           const viewport = window.innerHeight || 800;
           const rect = node.getBoundingClientRect();
+          const top = Math.max(0, Math.round(rect.top));
 
-          // 底部超出窗口 → 钉死高度让根自己滚
+          // 视图模式下宿主的输入框浮在底部。只给内容加 padding 不够——
+          // 滚动视口本身还是伸到输入框底下，滚到底时最后几行仍在框下面。
+          // 正确做法是把视口高度减掉输入框高度，让可视区域停在输入框上沿。
+          if (surface === 'view' && composerGap > 0) {
+            const room = viewport - top - composerGap - 8;
+            if (room >= 200) {
+              node.style.maxHeight = Math.round(room) + 'px';
+              return;
+            }
+          }
+
+          // 其它情况：底部超出窗口就钉死高度让根自己滚
           if (rect.bottom <= viewport - 4) return;
-          const room = viewport - Math.max(0, Math.round(rect.top)) - 12;
+          const room = viewport - top - 12;
           if (room < 200) return;
           node.style.maxHeight = Math.round(room) + 'px';
         };
@@ -2037,6 +2075,23 @@ window.__ModuleLoader__.load({
           await postJson('pause', { paused: nextPaused === true });
           await load('silent');
           setToast({ kind: 'ok', text: nextPaused ? t('pausedOn') : t('pausedOff') });
+        } catch (error) {
+          fail(error);
+        } finally {
+          setBusy(null);
+        }
+      }
+
+      /** 重置统计计数；可选连审计一起清。 */
+      async function resetStats(withAudit) {
+        if (busy !== null) return;
+        setBusy('stats-reset');
+        setActionError(null);
+        try {
+          await postJson('stats/reset', { audit: withAudit === true });
+          setResetOpen(false);
+          await load('silent');
+          setToast({ kind: 'ok', text: withAudit ? t('statsResetDoneAudit') : t('statsResetDone') });
         } catch (error) {
           fail(error);
         } finally {
@@ -2862,15 +2917,83 @@ window.__ModuleLoader__.load({
           data.configSource === 'settings' && data.overrideFile === true ? h('p', { className: 'dws-banner' }, t('overrideInfo')) : null,
           h(
             'div',
-            { className: 'dws-stats' },
-            h('span', { className: 'dws-label' }, t('statsTitle')),
-            statChip(t('statDrafts'), stats.drafts),
-            statChip(t('statSent'), stats.sent),
-            statChip(t('statSkipped'), stats.skipped),
-            statChip(t('statBlocked'), stats.blocked),
-            statChip(t('statErrors'), stats.errors)
+            { className: 'dws-stats-row' },
+            h(
+              'div',
+              { className: 'dws-stats' },
+              h('span', { className: 'dws-label' }, t('statsTitle')),
+              statChip(t('statDrafts'), stats.drafts),
+              statChip(t('statSent'), stats.sent),
+              statChip(t('statSkipped'), stats.skipped),
+              statChip(t('statBlocked'), stats.blocked),
+              statChip(t('statErrors'), stats.errors)
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-btn dws-btn-small',
+                title: t('statsResetTitle'),
+                disabled: busy !== null,
+                onClick: function () {
+                  setResetOpen(true);
+                },
+              },
+              busy === 'stats-reset' ? t('saving') : t('statsReset')
+            )
           ),
+          resetOpen ? renderResetPanel() : null,
           checks !== null ? h('div', { className: 'dws-field' }, h('span', { className: 'dws-label' }, t('checksTitle')), renderChecks()) : null
+        );
+      }
+
+      /** 重置统计的二次确认：两个选项，都不可撤销。 */
+      function renderResetPanel() {
+        return h(
+          'div',
+          { className: 'dws-reset-panel', role: 'group', 'aria-label': t('statsReset') },
+          h('p', { className: 'dws-hint' }, t('statsResetConfirm')),
+          h(
+            'div',
+            { className: 'dws-row' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-btn dws-btn-primary dws-btn-small',
+                disabled: busy !== null,
+                onClick: function () {
+                  resetStats(false);
+                },
+              },
+              t('statsResetOnlyStats')
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-btn dws-btn-small',
+                disabled: busy !== null,
+                onClick: function () {
+                  resetStats(true);
+                },
+              },
+              t('statsResetWithAudit')
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'dws-btn dws-btn-small',
+                disabled: busy !== null,
+                onClick: function () {
+                  setResetOpen(false);
+                },
+              },
+              t('cancel')
+            )
+          ),
+          h('p', { className: 'dws-hint' }, t('statsResetConfirmAudit'))
         );
       }
 
@@ -4177,10 +4300,10 @@ window.__ModuleLoader__.load({
 
       // ⑤ 输入框高度探针（只在会话视图里有意义，注册成本极低）
       entries.push(
-        ctx.slots.inject('conversation.composer.dock', function () {
+        ctx.slots.inject('conversation.input.dock', function () {
           try {
             const off = ctx.slots.register(
-              { name: 'conversation.composer.dock', id: 'dingtalk-self-probe', order: -100 },
+              { name: 'conversation.input.dock', id: 'dingtalk-self-probe', order: -100 },
               ComposerGapProbe
             );
             return typeof off === 'function' ? off : function () {};

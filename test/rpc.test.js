@@ -392,3 +392,48 @@ test('POST test-reply 空消息由宿主拒绝', async () => {
   assert.equal(json.ok, false);
   assert.match(json.error, /先填/);
 });
+
+// ---------- 统计重置 ----------
+
+test('POST stats/reset 把累加计数归零，审计默认保留', async () => {
+  const h = harness();
+  const state = h.store.load();
+  state.stats = { drafts: 3, sent: 41, skipped: 2, blocked: 1, errors: 259 };
+  state.audit = [{ ts: '2026-10-29T00:00:00.000Z', action: 'error' }, { ts: '2026-11-17T00:00:00.000Z', action: 'sent' }];
+  h.store.save(state);
+
+  const r = await h.call('POST', 'stats/reset', {});
+  assert.equal(r.status, 200);
+  assert.equal(r.json.ok, true);
+  assert.equal(r.json.before.errors, 259, '返回重置前的值');
+  assert.equal(r.json.auditCleared, 0, '默认不清审计');
+
+  const after = h.store.load();
+  assert.deepEqual(after.stats, { drafts: 0, sent: 0, skipped: 0, blocked: 0, errors: 0 });
+  assert.equal(after.audit.length, 2, '审计保留');
+});
+
+test('POST stats/reset 传 audit:true 时连审计一起清', async () => {
+  const h = harness();
+  const state = h.store.load();
+  state.stats = { drafts: 0, sent: 0, skipped: 0, blocked: 0, errors: 7 };
+  state.audit = [
+    { ts: '2026-10-29T00:00:00.000Z', action: 'error' },
+    { ts: '2026-11-10T00:00:00.000Z', action: 'error' },
+    { ts: '2026-11-17T00:00:00.000Z', action: 'sent' }
+  ];
+  h.store.save(state);
+
+  const r = await h.call('POST', 'stats/reset', { audit: true });
+  assert.equal(r.json.ok, true);
+  assert.equal(r.json.auditCleared, 3);
+
+  const after = h.store.load();
+  assert.equal(after.stats.errors, 0);
+  assert.equal(after.audit.length, 0, '审计已清空');
+});
+
+test('stats/reset 在路由表里（宿主会为它注册 exact 路由）', async () => {
+  const { API_ROUTE_PATHS } = await import('../lib/rpc.js');
+  assert.ok(API_ROUTE_PATHS.some((p) => p.endsWith('/stats/reset')));
+});
